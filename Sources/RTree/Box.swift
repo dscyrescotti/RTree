@@ -25,6 +25,14 @@ public struct Box: Equatable, Decodable {
         (max(box.maxX, maxX) - min(box.minX, minX)) * (max(box.maxY, maxY) - min(box.minY, minY))
     }
 
+    public func intersects(with box: Box) -> Bool {
+        box.minX <= maxX && box.minY <= maxY && box.maxX >= minX && box.maxY >= minY
+    }
+
+    public func contains(with box: Box) -> Bool {
+        minX <= box.minX && minY <= box.minY && box.maxX <= maxX && box.maxY <= maxY
+    }
+
     public func intersectedArea(on box: Box) -> Double {
         let minX = max(minX, box.minX)
         let minY = max(minY, box.minY)

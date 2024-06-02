@@ -11,15 +11,43 @@ public class RTree {
         self.root = .createNode()
     }
 
+    // MARK: - Retrival
     public func traverse() -> [Node] {
+        _traverse(from: root)
+    }
+
+    private func _traverse(from _root: Node) -> [Node] {
         var result: [Node] = []
         var nodesToSearch: [Node] = []
-        var currentNode: Node? = root
+        var currentNode: Node? = _root
         while let node = currentNode {
             if node.isLeaf {
                 result.append(contentsOf: node.children)
             } else {
                 nodesToSearch.append(contentsOf: node.children)
+            }
+            currentNode = nodesToSearch.popLast()
+        }
+        return result
+    }
+
+    // MARK: - Search
+    public func search(box: Box) -> [Node] {
+        guard box.intersects(with: root.box) else { return [] }
+        var result: [Node] = []
+        var nodesToSearch: [Node] = []
+        var currentNode: Node? = root
+        while let node = currentNode {
+            for childNode in node.children {
+                if box.intersects(with: childNode.box) {
+                    if node.isLeaf {
+                        result.append(childNode)
+                    } else if box.contains(with: childNode.box) {
+                        result.append(contentsOf: _traverse(from: childNode))
+                    } else {
+                        nodesToSearch.append(childNode)
+                    }
+                }
             }
             currentNode = nodesToSearch.popLast()
         }
