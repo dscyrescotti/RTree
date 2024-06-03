@@ -1,28 +1,28 @@
 import Foundation
 
-public class RTree {
-    public var root: Node
+public class RTree<T> {
+    public var root: Node<T>
     let maxEntries: Int
     let minEntries: Int
 
     public init(maxEntries: Int = 9) {
         self.maxEntries = max(4, maxEntries)
         self.minEntries = max(2, Int(ceil(Double(maxEntries) * 0.4)))
-        self.root = .createNode()
+        self.root = Node<T>.createNode()
     }
 
     // MARK: - Retrival
-    public func traverse() -> [Node] {
+    public func traverse() -> [T] {
         _traverse(from: root)
     }
 
-    private func _traverse(from _root: Node) -> [Node] {
-        var result: [Node] = []
-        var nodesToSearch: [Node] = []
-        var currentNode: Node? = _root
+    private func _traverse(from _root: Node<T>) -> [T] {
+        var result: [T] = []
+        var nodesToSearch: [Node<T>] = []
+        var currentNode: Node<T>? = _root
         while let node = currentNode {
             if node.isLeaf {
-                result.append(contentsOf: node.children)
+                result.append(contentsOf: node.children.compactMap { $0.value })
             } else {
                 nodesToSearch.append(contentsOf: node.children)
             }
@@ -32,16 +32,18 @@ public class RTree {
     }
 
     // MARK: - Search
-    public func search(box: Box) -> [Node] {
+    public func search(box: Box) -> [T] {
         guard box.intersects(with: root.box) else { return [] }
-        var result: [Node] = []
-        var nodesToSearch: [Node] = []
-        var currentNode: Node? = root
+        var result: [T] = []
+        var nodesToSearch: [Node<T>] = []
+        var currentNode: Node<T>? = root
         while let node = currentNode {
             for childNode in node.children {
                 if box.intersects(with: childNode.box) {
                     if node.isLeaf {
-                        result.append(childNode)
+                        if let value = childNode.value {
+                            result.append(value)
+                        }
                     } else if box.contains(with: childNode.box) {
                         result.append(contentsOf: _traverse(from: childNode))
                     } else {
@@ -55,14 +57,14 @@ public class RTree {
     }
 
     // MARK: - Insertion
-    public func insert(box: Box) {
-        let node: Node = .createNode(in: box)
+    public func insert(_ value: T, in box: Box) {
+        let node: Node = Node<T>.createNode(in: box, for: value)
         _insert(node, level: root.height - 1)
     }
 
-    private func _insert(_ node: Node, level: Int) {
+    private func _insert(_ node: Node<T>, level: Int) {
         let box = node.box
-        var path: [Node] = []
+        var path: [Node<T>] = []
         var level = level
         let leafNode = _chooseSubtree(for: box, from: root, at: level, into: &path)
         leafNode.children.append(node)
@@ -77,14 +79,14 @@ public class RTree {
         _adjustParentBoxes(with: box, through: path, at: level)
     }
 
-    private func _chooseSubtree(for box: Box, from rootNode: Node, at level: Int, into path: inout [Node]) -> Node {
+    private func _chooseSubtree(for box: Box, from rootNode: Node<T>, at level: Int, into path: inout [Node<T>]) -> Node<T> {
         var node = rootNode
         while true {
             path.append(node)
             if node.isLeaf || path.count - 1 == level { break }
             var minArea: Double = .infinity
             var minEnlargement: Double = .infinity
-            var targetNode: Node?
+            var targetNode: Node<T>?
             for node in node.children {
                 let area = node.box.area
                 let enlargement = box.enlargedArea(for: node.box) - area
@@ -104,8 +106,11 @@ public class RTree {
         return node
     }
 
+    // MARK: - Removal
+
+
     // MARK: - Splitting
-    private func _split(on path: [Node], at level: Int) {
+    private func _split(on path: [Node<T>], at level: Int) {
         let node = path[level]
         let numOfChildren = node.children.count
         let minNumOfChildren = minEntries
@@ -115,7 +120,7 @@ public class RTree {
 
         let children = Array(node.children[splitIndex..<node.children.count])
         node.children.removeSubrange(splitIndex..<node.children.count)
-        let newNode: Node = .createNode(with: children)
+        let newNode: Node = Node<T>.createNode(with: children)
         newNode.height = node.height
         newNode.isLeaf = node.isLeaf
 
@@ -129,16 +134,16 @@ public class RTree {
         }
     }
 
-    private func _splitRoot(with node: Node, and newNode: Node) {
-        root = .createNode(with: [node, newNode])
+    private func _splitRoot(with node: Node<T>, and newNode: Node<T>) {
+        root = Node<T>.createNode(with: [node, newNode])
         root.height = node.height + 1
         root.isLeaf = false
         root.updateBox()
     }
 
-    private func _chooseSplitAxis(for node: Node, with numOfChildren: Int, by minEntries: Int) {
-        let comparatorX: (Node, Node) -> Bool = { $0.box.minX < $1.box.minX }
-        let comparatorY: (Node, Node) -> Bool = { $0.box.minY < $1.box.minY }
+    private func _chooseSplitAxis(for node: Node<T>, with numOfChildren: Int, by minEntries: Int) {
+        let comparatorX: (Node<T>, Node<T>) -> Bool = { $0.box.minX < $1.box.minX }
+        let comparatorY: (Node<T>, Node<T>) -> Bool = { $0.box.minY < $1.box.minY }
         let xMargin = _calculateDistributionMargin(for: node, with: numOfChildren, by: minEntries, using: comparatorX)
         let yMargin = _calculateDistributionMargin(for: node, with: numOfChildren, by: minEntries, using: comparatorY)
         if xMargin < yMargin {
@@ -146,7 +151,7 @@ public class RTree {
         }
     }
 
-    private func _calculateDistributionMargin(for node: Node, with numOfChildren: Int, by minEntries: Int, using comparator: (Node, Node) -> Bool) -> Double {
+    private func _calculateDistributionMargin(for node: Node<T>, with numOfChildren: Int, by minEntries: Int, using comparator: (Node<T>, Node<T>) -> Bool) -> Double {
         node.children.sort(by: comparator)
         let leftNode = mergeChildNodes(of: node, from: 0, to: minEntries)
         let rightNode = mergeChildNodes(of: node, from: numOfChildren - minEntries, to: numOfChildren)
@@ -165,7 +170,7 @@ public class RTree {
         return margin
     }
 
-    private func _chooseSplitIndex(for node: Node, with numOfChildren: Int, by minEntries: Int) -> Int {
+    private func _chooseSplitIndex(for node: Node<T>, with numOfChildren: Int, by minEntries: Int) -> Int {
         var index: Int?
         var minOverlap: Double = .infinity
         var minArea: Double = .infinity
@@ -190,13 +195,13 @@ public class RTree {
         return index ?? numOfChildren - minEntries
     }
 
-    private func _adjustParentBoxes(with box: Box, through path: [Node], at level: Int) {
+    private func _adjustParentBoxes(with box: Box, through path: [Node<T>], at level: Int) {
         for index in stride(from: level, through: 0, by: -1) {
             path[index].box.enlarge(for: box)
         }
     }
 
-    public func mergeChildNodes(of node: Node, from start: Int, to end: Int, into newNode: Node = .createNode()) -> Node {
+    public func mergeChildNodes(of node: Node<T>, from start: Int, to end: Int, into newNode: Node<T> = .createNode()) -> Node<T> {
         newNode.box = .infinity
         for index in start..<end {
             let node = node.children[index]
