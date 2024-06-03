@@ -1,6 +1,6 @@
 import Foundation
 
-public class RTree<T> {
+public class RTree<T> where T: Equatable {
     public var root: Node<T>
     let maxEntries: Int
     let minEntries: Int
@@ -107,7 +107,73 @@ public class RTree<T> {
     }
 
     // MARK: - Removal
+    @discardableResult
+    public func remove(_ value: T, in box: Box) -> T? {
+        var node: Node<T>? = root
 
+        var path: [Node<T>] = []
+        var indices: [Int] = []
+        var parent: Node<T>?
+        var i: Int = 0
+        var goingUp: Bool = false
+
+        while node != nil || !path.isEmpty {
+            guard let currentNode = node else {
+                node = path.popLast()
+                parent = path.last
+                i = indices.popLast() ?? 0
+                goingUp = true
+                continue
+            }
+            if currentNode.isLeaf, let index = _findIndex(of: value, nodes: currentNode.children) {
+                let removedNode = currentNode.children.remove(at: index)
+                path.append(currentNode)
+                _condense(path)
+                return removedNode.value
+            }
+            if !goingUp && !currentNode.isLeaf && currentNode.box.contains(with: box) {
+                path.append(currentNode)
+                indices.append(i)
+                i = 0
+                parent = currentNode
+                node = currentNode.children[0]
+            } else if let parent {
+                i += 1
+                node = parent.children[i]
+                goingUp = false
+            } else {
+                node = nil
+            }
+        }
+        return nil
+    }
+
+    private func _findIndex(of value: T, nodes: [Node<T>]) -> Int? {
+        for (index, node) in nodes.enumerated() {
+            if node.value == value { return index }
+        }
+        return nil
+    }
+
+    private func _condense(_ path: [Node<T>]) {
+        var i = path.count - 1
+        while i >= 0 {
+            let node = path[i]
+            if node.children.isEmpty {
+                if i > 0 {
+                    var siblings = path[i - 1].children
+                    if let index = siblings.firstIndex(where: { $0 === node }) {
+                        siblings.remove(at: index)
+                    }
+                } else {
+                    root = .createNode()
+                }
+            } else {
+                _calculateBox(of: node)
+            }
+            i -= 1
+        }
+    }
 
     // MARK: - Splitting
     private func _split(on path: [Node<T>], at level: Int) {
@@ -153,8 +219,8 @@ public class RTree<T> {
 
     private func _calculateDistributionMargin(for node: Node<T>, with numOfChildren: Int, by minEntries: Int, using comparator: (Node<T>, Node<T>) -> Bool) -> Double {
         node.children.sort(by: comparator)
-        let leftNode = mergeChildNodes(of: node, from: 0, to: minEntries)
-        let rightNode = mergeChildNodes(of: node, from: numOfChildren - minEntries, to: numOfChildren)
+        let leftNode = _mergeChildNodes(of: node, from: 0, to: minEntries)
+        let rightNode = _mergeChildNodes(of: node, from: numOfChildren - minEntries, to: numOfChildren)
         var margin = leftNode.box.margin + rightNode.box.margin
 
         for index in minEntries..<numOfChildren - minEntries {
@@ -175,8 +241,8 @@ public class RTree<T> {
         var minOverlap: Double = .infinity
         var minArea: Double = .infinity
         for idx in minEntries...numOfChildren - minEntries {
-            let node1 = mergeChildNodes(of: node, from: 0, to: idx)
-            let node2 = mergeChildNodes(of: node, from: idx, to: numOfChildren)
+            let node1 = _mergeChildNodes(of: node, from: 0, to: idx)
+            let node2 = _mergeChildNodes(of: node, from: idx, to: numOfChildren)
 
             let overlap = node1.box.intersectedArea(on: node2.box)
             let area = node1.box.area + node2.box.area
@@ -201,7 +267,12 @@ public class RTree<T> {
         }
     }
 
-    public func mergeChildNodes(of node: Node<T>, from start: Int, to end: Int, into newNode: Node<T> = .createNode()) -> Node<T> {
+    private func _calculateBox(of node: Node<T>) {
+        _mergeChildNodes(of: node, from: 0, to: node.children.count, into: node)
+    }
+
+    @discardableResult
+    private func _mergeChildNodes(of node: Node<T>, from start: Int, to end: Int, into newNode: Node<T> = .createNode()) -> Node<T> {
         newNode.box = .infinity
         for index in start..<end {
             let node = node.children[index]

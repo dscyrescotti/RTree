@@ -1,6 +1,6 @@
 import Foundation
 
-public class Node<T> {
+public class Node<T> where T: Equatable {
     public var box: Box
     public var value: T?
     public var isLeaf: Bool
