@@ -139,7 +139,7 @@ public class RTree<T> where T: Equatable {
                 node = currentNode.children[0]
             } else if let parent {
                 i += 1
-                node = parent.children[i]
+                node = parent.children[safe: i]
                 goingUp = false
             } else {
                 node = nil
@@ -279,5 +279,12 @@ public class RTree<T> where T: Equatable {
             newNode.box.enlarge(for: node.box)
         }
         return newNode
+    }
+}
+
+extension Collection {
+    /// Returns the element at the specified index if it is within bounds, otherwise nil.
+    subscript (safe index: Index) -> Element? {
+        return indices.contains(index) ? self[index] : nil
     }
 }
