@@ -1,9 +1,9 @@
 import Foundation
 
-public class RTree<T> where T: Equatable {
-    public var root: Node<T>
-    let maxEntries: Int
-    let minEntries: Int
+public final class RTree<T> where T: Equatable & Comparable {
+    private var root: Node<T>
+    private let maxEntries: Int
+    private let minEntries: Int
 
     public init(maxEntries: Int = 9) {
         self.maxEntries = max(4, maxEntries)
@@ -11,9 +11,13 @@ public class RTree<T> where T: Equatable {
         self.root = Node<T>.createNode()
     }
 
+    public var isEmpty: Bool {
+        root.children.isEmpty
+    }
+
     // MARK: - Retrival
-    public func traverse() -> [T] {
-        _traverse(from: root)
+    public func traverse(isInOrder: Bool = false) -> [T] {
+        isInOrder ? _traverseInOrder(from: root) : _traverse(from: root)
     }
 
     private func _traverse(from _root: Node<T>) -> [T] {
@@ -31,27 +35,76 @@ public class RTree<T> where T: Equatable {
         return result
     }
 
+    private func _traverseInOrder(from _root: Node<T>) -> [T] {
+        var result: [T] = []
+        var queue: [Node<T>] = [_root]
+        while let node = queue.first {
+            queue.removeFirst()
+            if node.isLeaf {
+                let children = node.children
+                    .compactMap { $0.value }
+                    .sorted(by: <)
+                result = _merge(result, children)
+            } else {
+                let nodes = node.children.sorted {
+                    guard let first = $0.value, let second = $1.value else { return false }
+                    return first < second
+                }
+                queue.append(contentsOf: nodes)
+            }
+        }
+        return result
+    }
+
+    private func _merge(_ left: [T], _ right: [T]) -> [T] {
+        var mergedArray: [T] = []
+        var leftIndex = 0
+        var rightIndex = 0
+
+        while leftIndex < left.count && rightIndex < right.count {
+            if left[leftIndex] < right[rightIndex] {
+                mergedArray.append(left[leftIndex])
+                leftIndex += 1
+            } else {
+                mergedArray.append(right[rightIndex])
+                rightIndex += 1
+            }
+        }
+
+        mergedArray.append(contentsOf: left[leftIndex...])
+        mergedArray.append(contentsOf: right[rightIndex...])
+
+        return mergedArray
+    }
+
     // MARK: - Search
-    public func search(box: Box) -> [T] {
+    func search(box: Box, isInOrder: Bool = false) -> [T] {
         guard box.intersects(with: root.box) else { return [] }
         var result: [T] = []
-        var nodesToSearch: [Node<T>] = []
-        var currentNode: Node<T>? = root
-        while let node = currentNode {
+        var queue: [Node<T>] = [root]
+        while let node = queue.first {
+            queue.removeFirst()
             for childNode in node.children {
                 if box.intersects(with: childNode.box) {
                     if node.isLeaf {
                         if let value = childNode.value {
-                            result.append(value)
+                            if isInOrder {
+                                result = _merge(result, [value])
+                            } else {
+                                result.append(value)
+                            }
                         }
                     } else if box.contains(with: childNode.box) {
-                        result.append(contentsOf: _traverse(from: childNode))
+                        if isInOrder {
+                            result = _merge(result, _traverse(from: childNode))
+                        } else {
+                            result.append(contentsOf: _traverse(from: childNode))
+                        }
                     } else {
-                        nodesToSearch.append(childNode)
+                        queue.append(childNode)
                     }
                 }
             }
-            currentNode = nodesToSearch.popLast()
         }
         return result
     }
@@ -279,12 +332,5 @@ public class RTree<T> where T: Equatable {
             newNode.box.enlarge(for: node.box)
         }
         return newNode
-    }
-}
-
-extension Collection {
-    /// Returns the element at the specified index if it is within bounds, otherwise nil.
-    subscript (safe index: Index) -> Element? {
-        return indices.contains(index) ? self[index] : nil
     }
 }

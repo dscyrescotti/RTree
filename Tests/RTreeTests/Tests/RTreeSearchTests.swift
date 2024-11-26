@@ -13,12 +13,12 @@ class RTreeSearchTests: BaseTestCase {
     """
     let resultBox4 = """
     [
-      10, 5, 11, 14, 18,
-      19, 7,  2,  8,  9
+      7,  2,  8,  9, 10, 
+      5, 11, 14, 18, 19
     ]
     """
     let resultBox5 = """
-    [ 5, 18, 2, 9 ]
+    [ 2, 9, 5, 18 ]
     """
 
     func testSearchBox1() {
